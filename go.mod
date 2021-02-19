@@ -1,4 +1,4 @@
-module cidrcheck
+module github.com/jhammer/cidrcheck
 
 go 1.16
 
