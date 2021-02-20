@@ -58,7 +58,6 @@ func handleClient(client net.Conn, list *rangeList) {
 	scanner := bufio.NewScanner(client)
 
 	for scanner.Scan() {
-		fmt.Println(scanner.Text())
 		response := "NOT_FOUND"
 
 		if list.contains(scanner.Text()) {
