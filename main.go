@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/yl2chen/cidranger"
 	"log"
+	"log/syslog"
 	"net"
 	"os"
 	"sync"
@@ -17,11 +18,11 @@ type rangeList struct {
 	mutex  sync.RWMutex
 }
 
-func (r *rangeList) load(path string) bool {
+func (r *rangeList) load(path string, logger *syslog.Writer) bool {
 	file, err := os.Open(path)
 
 	if err != nil {
-		log.Printf("Failed to open %s: %s", path, err)
+		logger.Err(fmt.Sprintf("Failed to open %s: %s", path, err))
 		return false
 	}
 
@@ -54,22 +55,20 @@ func (r *rangeList) contains(ipstr string) bool {
 }
 
 func handleClient(client net.Conn, list *rangeList) {
-	log.Printf("Client connected [%s]", client.RemoteAddr().Network())
 	scanner := bufio.NewScanner(client)
 
 	for scanner.Scan() {
 		fmt.Println(scanner.Text())
-		response := "0"
+		response := "NOT_FOUND"
 
 		if list.contains(scanner.Text()) {
-			response = "1"
+			response = "FOUND"
 		}
 
 		client.Write([]byte(response + "\n"))
 	}
 
 	client.Close()
-	log.Println("Client disconnected")
 }
 
 func main() {
@@ -80,14 +79,20 @@ func main() {
 	flag.Parse()
 
 	if *socketPathPtr == "" || *cidrsPathPtr == "" {
-		fmt.Println("Socket and CIDR paths required")
+		fmt.Fprintln(os.Stderr, "Socket and CIDR paths required")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
+	logger, err := syslog.Dial("", "", syslog.LOG_INFO|syslog.LOG_DAEMON, "")
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	var list rangeList
 
-	if !list.load(*cidrsPathPtr) {
+	if !list.load(*cidrsPathPtr, logger) {
 		os.Exit(1)
 	}
 
@@ -97,8 +102,8 @@ func main() {
 			for {
 				<-ticker.C
 
-				if list.load(*cidrsPathPtr) {
-					fmt.Println("Refreshed cidrs")
+				if list.load(*cidrsPathPtr, logger) {
+					logger.Info("Refreshed cidr list")
 				}
 			}
 		}()
